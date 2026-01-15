@@ -19,6 +19,7 @@ import AnalyticsView from './AnalyticsView';
 import CommunityView from './CommunityView';
 import SettingsView from './SettingsView';
 import ProfileView from './ProfileView';
+import ChatOverlay from './ChatOverlay';
 
 interface DashboardLayoutProps {
   session: Session;
@@ -34,12 +35,22 @@ export interface SessionRequest {
   autoOpen: boolean;
 }
 
+interface Ally {
+  name: string;
+  role: string;
+  status: string;
+}
+
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
   const [activeView, setActiveView] = useState<ViewState>('home');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   
   // Bridge state to pass focus tool data to Sessions view
   const [sessionRequest, setSessionRequest] = useState<SessionRequest | null>(null);
+
+  // Chat State
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [activeChatAlly, setActiveChatAlly] = useState<Ally | null>(null);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -48,6 +59,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
   const handleSessionRequest = (request: SessionRequest) => {
     setSessionRequest(request);
     setActiveView('sessions');
+    // Auto collapse chat if focusing
+    setIsChatOpen(false);
+  };
+
+  const handleOpenChat = (ally: Ally) => {
+    setActiveChatAlly(ally);
+    setIsChatOpen(true);
   };
 
   const navItems = [
@@ -66,7 +84,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
       case 'analytics': return <AnalyticsView />;
       case 'community': return <CommunityView />;
       case 'settings': return <SettingsView user={session.user} />;
-      case 'profile': return <ProfileView user={session.user} />;
+      case 'profile': return <ProfileView user={session.user} onOpenChat={handleOpenChat} />;
       default: return <DashboardHome user={session.user} onChangeView={setActiveView} onRequestSession={handleSessionRequest} />;
     }
   };
@@ -229,6 +247,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
           {renderView()}
         </div>
       </main>
+
+      {/* Global Chat Overlay */}
+      <ChatOverlay 
+        isOpen={isChatOpen} 
+        onClose={() => setIsChatOpen(false)} 
+        ally={activeChatAlly} 
+      />
     </div>
   );
 };

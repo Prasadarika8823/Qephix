@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, User, ArrowRight, Github, Chrome, Loader2, AlertCircle, MailOpen, HelpCircle } from 'lucide-react';
+import { X, Mail, Lock, User, ArrowRight, Github, Chrome, Loader2, AlertCircle, MailOpen, HelpCircle, ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface AuthModalProps {
@@ -9,7 +9,7 @@ interface AuthModalProps {
 }
 
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) => {
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -50,7 +50,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) =
         });
         if (error) throw error;
         setIsSuccess(true);
-      } else {
+      } else if (mode === 'signin') {
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -58,6 +58,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) =
         if (error) throw error;
         // Successful login
         onClose();
+      } else if (mode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+        setIsSuccess(true);
       }
     } catch (err: any) {
       setError(err.message);
@@ -115,9 +121,11 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) =
                <div className="w-20 h-20 bg-brand-cyber/10 border border-brand-cyber/20 text-brand-cyber rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
                   <MailOpen className="w-10 h-10" />
                </div>
-               <h3 className="text-2xl font-display font-bold text-white mb-3">Check your inbox</h3>
+               <h3 className="text-2xl font-display font-bold text-white mb-3">
+                 {mode === 'forgot' ? 'Reset Link Sent' : 'Check your inbox'}
+               </h3>
                <p className="text-slate-400 mb-8 leading-relaxed">
-                  We've sent a secure confirmation link to <br/>
+                  {mode === 'forgot' ? 'We sent a password reset link to' : 'We sent a secure confirmation link to'} <br/>
                   <span className="text-white font-medium">{email}</span>
                </p>
                <div className="space-y-3">
@@ -140,10 +148,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) =
               {/* Header */}
               <div className="text-center mb-8">
                 <h2 className="font-display text-3xl font-bold text-white mb-2">
-                  {mode === 'signin' ? 'Welcome Back' : 'Join the Protocol'}
+                  {mode === 'signin' ? 'Welcome Back' : mode === 'signup' ? 'Join the Protocol' : 'Reset Password'}
                 </h2>
                 <p className="text-slate-400 text-sm">
-                  {mode === 'signin' ? 'Resume your focus session.' : 'Start your journey to deep work.'}
+                  {mode === 'signin' ? 'Resume your focus session.' : mode === 'signup' ? 'Start your journey to deep work.' : 'Enter your email to receive recovery instructions.'}
                 </p>
               </div>
 
@@ -155,55 +163,57 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) =
                 </div>
               )}
 
-              {/* Social Login */}
-              <div className="grid grid-cols-2 gap-4 mb-2">
-                <button 
-                  onClick={() => handleSocialLogin('google')}
-                  disabled={socialLoading !== null || loading}
-                  className="group flex items-center justify-center gap-2 py-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-brand-cyber/50 text-slate-300 hover:text-white transition-all text-sm font-medium relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {socialLoading === 'google' ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-brand-cyber" />
-                  ) : (
-                    <>
-                      <Chrome className="w-4 h-4 text-slate-400 group-hover:text-brand-cyber transition-colors" /> 
-                      <span>Google</span>
-                    </>
-                  )}
-                  {/* Subtle hover glow */}
-                  <div className="absolute inset-0 bg-brand-cyber/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </button>
-                <button 
-                  onClick={() => handleSocialLogin('github')}
-                  disabled={socialLoading !== null || loading}
-                  className="group flex items-center justify-center gap-2 py-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-brand-purple/50 text-slate-300 hover:text-white transition-all text-sm font-medium relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {socialLoading === 'github' ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-brand-purple" />
-                  ) : (
-                    <>
-                      <Github className="w-4 h-4 text-slate-400 group-hover:text-brand-purple transition-colors" />
-                      <span>GitHub</span>
-                    </>
-                  )}
-                  {/* Subtle hover glow */}
-                  <div className="absolute inset-0 bg-brand-purple/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </button>
-              </div>
-              
-              <div className="flex items-center justify-center gap-1 mb-6">
-                 <HelpCircle className="w-3 h-3 text-slate-600" />
-                 <span className="text-[10px] text-slate-600">Providers must be enabled in Supabase Dashboard</span>
-              </div>
+              {/* Social Login (Hidden on Forgot Password) */}
+              {mode !== 'forgot' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4 mb-2">
+                    <button 
+                      onClick={() => handleSocialLogin('google')}
+                      disabled={socialLoading !== null || loading}
+                      className="group flex items-center justify-center gap-2 py-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-brand-cyber/50 text-slate-300 hover:text-white transition-all text-sm font-medium relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {socialLoading === 'google' ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-brand-cyber" />
+                      ) : (
+                        <>
+                          <Chrome className="w-4 h-4 text-slate-400 group-hover:text-brand-cyber transition-colors" /> 
+                          <span>Google</span>
+                        </>
+                      )}
+                      <div className="absolute inset-0 bg-brand-cyber/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    </button>
+                    <button 
+                      onClick={() => handleSocialLogin('github')}
+                      disabled={socialLoading !== null || loading}
+                      className="group flex items-center justify-center gap-2 py-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-brand-purple/50 text-slate-300 hover:text-white transition-all text-sm font-medium relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {socialLoading === 'github' ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-brand-purple" />
+                      ) : (
+                        <>
+                          <Github className="w-4 h-4 text-slate-400 group-hover:text-brand-purple transition-colors" />
+                          <span>GitHub</span>
+                        </>
+                      )}
+                      <div className="absolute inset-0 bg-brand-purple/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    </button>
+                  </div>
+                  
+                  <div className="flex items-center justify-center gap-1 mb-6">
+                     <HelpCircle className="w-3 h-3 text-slate-600" />
+                     <span className="text-[10px] text-slate-600">Providers must be enabled in Supabase Dashboard</span>
+                  </div>
 
-              <div className="relative mb-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/10"></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase tracking-widest">
-                  <span className="bg-[#0B1121] px-3 text-slate-600 font-medium">Or continue with email</span>
-                </div>
-              </div>
+                  <div className="relative mb-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-white/10"></div>
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase tracking-widest">
+                      <span className="bg-[#0B1121] px-3 text-slate-600 font-medium">Or continue with email</span>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Form */}
               <form className="space-y-4" onSubmit={handleAuth}>
@@ -241,26 +251,34 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) =
                   </div>
                 </div>
 
-                <div className="group">
-                  <div className="flex justify-between items-center mb-1 ml-1">
-                    <label className="block text-xs font-bold text-slate-500 group-focus-within:text-brand-cyber transition-colors uppercase">Password</label>
-                    {mode === 'signin' && (
-                      <a href="#" className="text-xs text-brand-cyber hover:text-brand-cyber/80 transition-colors">Forgot password?</a>
-                    )}
+                {mode !== 'forgot' && (
+                  <div className="group">
+                    <div className="flex justify-between items-center mb-1 ml-1">
+                      <label className="block text-xs font-bold text-slate-500 group-focus-within:text-brand-cyber transition-colors uppercase">Password</label>
+                      {mode === 'signin' && (
+                        <button 
+                          type="button"
+                          onClick={() => { setMode('forgot'); setError(null); }}
+                          className="text-xs text-brand-cyber hover:text-brand-cyber/80 transition-colors"
+                        >
+                          Forgot password?
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-brand-cyber transition-colors" />
+                      <input 
+                        type="password" 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full bg-[#020617] border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-brand-cyber/50 focus:ring-1 focus:ring-brand-cyber/50 transition-all text-sm"
+                        placeholder="••••••••"
+                        required
+                        disabled={loading || socialLoading !== null}
+                      />
+                    </div>
                   </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-brand-cyber transition-colors" />
-                    <input 
-                      type="password" 
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-[#020617] border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-brand-cyber/50 focus:ring-1 focus:ring-brand-cyber/50 transition-all text-sm"
-                      placeholder="••••••••"
-                      required
-                      disabled={loading || socialLoading !== null}
-                    />
-                  </div>
-                </div>
+                )}
 
                 <button 
                   disabled={loading || socialLoading !== null}
@@ -270,7 +288,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) =
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      {mode === 'signin' ? 'Sign In' : 'Create Account'}
+                      {mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
                       <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </>
                   )}
@@ -279,16 +297,27 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClose }) =
 
               {/* Footer Switch */}
               <div className="mt-6 text-center text-sm text-slate-400">
-                {mode === 'signin' ? "Don't have an account? " : "Already have an account? "}
-                <button 
-                  onClick={() => {
-                    setMode(mode === 'signin' ? 'signup' : 'signin');
-                    setError(null);
-                  }}
-                  className="text-white font-medium hover:text-brand-accent transition-colors underline decoration-brand-accent/30 hover:decoration-brand-accent decoration-2 underline-offset-4"
-                >
-                  {mode === 'signin' ? 'Join now' : 'Sign in'}
-                </button>
+                {mode === 'forgot' ? (
+                  <button 
+                    onClick={() => { setMode('signin'); setError(null); }}
+                    className="flex items-center justify-center gap-2 w-full text-white font-medium hover:text-brand-accent transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Back to Sign In
+                  </button>
+                ) : (
+                  <>
+                    {mode === 'signin' ? "Don't have an account? " : "Already have an account? "}
+                    <button 
+                      onClick={() => {
+                        setMode(mode === 'signin' ? 'signup' : 'signin');
+                        setError(null);
+                      }}
+                      className="text-white font-medium hover:text-brand-accent transition-colors underline decoration-brand-accent/30 hover:decoration-brand-accent decoration-2 underline-offset-4"
+                    >
+                      {mode === 'signin' ? 'Join now' : 'Sign in'}
+                    </button>
+                  </>
+                )}
               </div>
             </>
           )}
