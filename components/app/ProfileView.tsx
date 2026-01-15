@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
+import { supabase } from '../../lib/supabase';
 import { 
   MapPin, Calendar, Edit3, Shield, Zap, Clock, 
   TrendingUp, CheckCircle2, Lock, Eye, Users, 
   GraduationCap, Briefcase, FileText, Handshake, 
   Search, ShieldCheck, Activity, Globe, Scale,
-  MessageSquare
+  MessageSquare, Award, Loader2
 } from 'lucide-react';
 import SectionFade from '../ui/SectionFade';
+import { UserProfile, Achievement, Ally } from '../../types';
 
 interface ProfileViewProps {
   user: User;
@@ -20,42 +22,87 @@ type Tab = 'dossier' | 'network' | 'pacts';
 const ProfileView: React.FC<ProfileViewProps> = ({ user, onOpenChat }) => {
   const [viewMode, setViewMode] = useState<RelationshipView>('self');
   const [activeTab, setActiveTab] = useState<Tab>('dossier');
+  
+  // --- REAL DATA STATE ---
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [allies, setAllies] = useState<Ally[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
-  // --- Mock Identity Data ---
+  useEffect(() => {
+    fetchProfileData();
+  }, [user.id]);
+
+  const fetchProfileData = async () => {
+    try {
+      setLoading(true);
+      
+      // 1. Fetch Profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      setProfile(profileData);
+
+      // 2. Fetch Achievements
+      const { data: badgeData } = await supabase
+        .from('achievements')
+        .select('*')
+        .eq('user_id', user.id);
+      setAchievements(badgeData || []);
+
+      // 3. Fetch Allies (Accepted)
+      const { data: alliesData } = await supabase
+        .from('allies')
+        .select('requester_id, accepter_id')
+        .or(`requester_id.eq.${user.id},accepter_id.eq.${user.id}`)
+        .eq('status', 'accepted');
+
+      if (alliesData && alliesData.length > 0) {
+          const friendIds = alliesData.map(a => 
+             a.requester_id === user.id ? a.accepter_id : a.requester_id
+          );
+          const { data: friendProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', friendIds);
+          
+          if (friendProfiles) {
+             setAllies(friendProfiles.map(p => ({ 
+                profile_id: p.id, 
+                full_name: p.full_name || 'Ally' 
+             })));
+          }
+      } else {
+        setAllies([]);
+      }
+
+    } catch (error) {
+      console.error("Error loading profile:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+     return <div className="flex items-center justify-center h-64 text-brand-accent animate-pulse"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+  }
+
+  // --- DERIVED STATE ---
   const identity = {
-    fullName: user.user_metadata?.full_name || 'Protocol User',
+    fullName: profile?.full_name || user.user_metadata?.full_name || 'Protocol User',
     handle: `@${user.email?.split('@')[0]}`,
-    role: "Senior System Architect",
-    institution: "Self-Taught / Independent",
-    location: "Global Grid (UTC-5)",
-    disciplineStatement: "Building resilient systems through consistent deep work. No zero days.",
-    reliability: 98,
-    joined: "Oct 2023",
-    status: "Open to Accountability"
+    role: "System Architect", // Placeholder as 'role' isn't in DB yet
+    institution: "QEPHIX Protocol",
+    location: "Global Grid",
+    disciplineStatement: profile?.daily_intent || "Building resilient systems through consistent deep work.",
+    reliability: profile?.discipline_index || 0,
+    joined: new Date(user.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
   };
 
-  // --- Mock Stats Data (Layered) ---
-  const stats = {
-    totalHours: { exact: "482h 15m", rounded: "480h+" },
-    streak: { exact: "14 Days", rounded: "10+ Days" },
-    integrity: { exact: "99.2%", rounded: "High" },
-    topics: [
-      { name: "System Design", hours: 140 },
-      { name: "Rust Programming", hours: 85 },
-      { name: "Calculus III", hours: 45 },
-    ]
-  };
-
-  // --- Mock Network Data ---
-  const allies = [
-    { name: "Sarah_Dev", role: "Frontend Engineer", status: "Focusing", common: "React, Design" },
-    { name: "Dr_Focus", role: "Med Student", status: "Online", common: "Biology" },
-  ];
-
-  const pacts = [
-    { title: "Weekly 20h Core", partner: "Sarah_Dev", progress: 85, status: "On Track" },
-    { title: "Morning 5am Club", partner: "Early_Risers", progress: 100, status: "Complete" }
-  ];
+  const hasBuilderBadge = achievements.some(a => a.badge_type === 'consistent_builder');
 
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-500">
@@ -79,9 +126,9 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onOpenChat }) => {
                  </div>
               </div>
               {/* Integrity Badge */}
-              <div className="absolute -bottom-3 -right-3 bg-[#020617] p-1.5 rounded-lg border border-white/10 shadow-lg flex items-center gap-1.5" title="Reliability Index">
+              <div className="absolute -bottom-3 -right-3 bg-[#020617] p-1.5 rounded-lg border border-white/10 shadow-lg flex items-center gap-1.5" title="Discipline Index">
                  <ShieldCheck className="w-4 h-4 text-brand-accent" />
-                 <span className="text-xs font-bold text-white">{identity.reliability}%</span>
+                 <span className="text-xs font-bold text-white">{identity.reliability}</span>
               </div>
            </div>
 
@@ -131,19 +178,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onOpenChat }) => {
                     <button className="px-4 py-2 bg-brand-accent/10 border border-brand-accent/20 rounded-lg text-xs font-bold text-brand-accent hover:bg-brand-accent/20 transition-all flex items-center gap-2">
                        <Zap className="w-3 h-3" /> Signal Mentorship
                     </button>
-                 )}
-                 {viewMode === 'ally' && (
-                     <button 
-                       onClick={() => onOpenChat && onOpenChat({ name: identity.fullName, role: identity.role, status: 'Online' })}
-                       className="px-4 py-2 bg-brand-accent hover:bg-orange-600 rounded-lg text-xs font-bold text-white shadow-[0_0_15px_rgba(234,88,12,0.3)] transition-all flex items-center gap-2"
-                     >
-                        <MessageSquare className="w-3 h-3" /> Secure Comms
-                     </button>
-                 )}
-                 {viewMode === 'observer' && (
-                     <button className="px-4 py-2 bg-brand-cyber/10 border border-brand-cyber/20 hover:bg-brand-cyber/20 rounded-lg text-xs font-bold text-brand-cyber transition-all flex items-center gap-2">
-                        <Users className="w-3 h-3" /> Request Alliance
-                     </button>
                  )}
               </div>
            </div>
@@ -206,7 +240,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onOpenChat }) => {
                         </div>
                         <div>
                            <div className="text-2xl font-display font-bold text-white">
-                              {viewMode === 'observer' ? stats.totalHours.rounded : stats.totalHours.exact}
+                              {profile ? Math.round((profile.total_sessions_count * 50) / 60) : 0}h
                            </div>
                            <div className="text-[10px] uppercase tracking-widest text-slate-500">Total Deep Work</div>
                         </div>
@@ -220,7 +254,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onOpenChat }) => {
                         </div>
                         <div>
                            <div className="text-2xl font-display font-bold text-white">
-                              {viewMode === 'observer' ? stats.streak.rounded : stats.streak.exact}
+                              {profile?.current_streak || 0} Days
                            </div>
                            <div className="text-[10px] uppercase tracking-widest text-slate-500">Consistency Streak</div>
                         </div>
@@ -233,52 +267,47 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onOpenChat }) => {
                         </div>
                         <div>
                            <div className="text-2xl font-display font-bold text-white">
-                              {viewMode === 'observer' ? stats.integrity.rounded : stats.integrity.exact}
+                              {profile?.discipline_index || 0}%
                            </div>
-                           <div className="text-[10px] uppercase tracking-widest text-slate-500">Session Integrity</div>
+                           <div className="text-[10px] uppercase tracking-widest text-slate-500">Discipline Index</div>
                         </div>
                      </div>
                   </div>
 
-                  {/* Detailed Breakdown (Hidden for Observers) */}
-                  <div className="glass-panel p-6 rounded-2xl border border-white/5">
-                     <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-bold text-white">Focus Distribution</h3>
-                        {viewMode === 'observer' ? (
-                           <div className="flex items-center gap-2 px-3 py-1 rounded bg-white/5 border border-white/10">
-                              <Lock className="w-3 h-3 text-slate-500" />
-                              <span className="text-[10px] text-slate-500 uppercase font-bold">Observer View Restricted</span>
-                           </div>
-                        ) : (
-                           <UnlockBadge text="Ally Access Active" />
+                  {/* Badges / Reputation */}
+                  <div className="glass-panel p-5 rounded-2xl border border-white/5">
+                     <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Reputation & Achievements</h3>
+                     
+                     <div className="space-y-3">
+                        {achievements.length === 0 && (
+                            <div className="text-center py-6 text-slate-500 text-xs italic">
+                                No achievements unlocked yet. Consistent effort is required.
+                            </div>
                         )}
-                     </div>
 
-                     {viewMode === 'observer' ? (
-                        <div className="h-40 flex items-center justify-center border border-dashed border-white/10 rounded-xl bg-white/[0.02]">
-                           <div className="text-center">
-                              <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                              <p className="text-sm text-slate-500">Connect as an Ally to view detailed topic breakdowns.</p>
+                        {hasBuilderBadge && (
+                           <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-brand-purple/20 to-brand-cyber/20 border border-brand-purple/30">
+                              <div className="p-2 rounded-lg bg-brand-purple/20 text-brand-purple">
+                                 <Award className="w-5 h-5" />
+                              </div>
+                              <div>
+                                 <p className="text-white text-xs font-bold">Consistent Builder</p>
+                                 <p className="text-[10px] text-slate-400">Discipline Index > 80 achieved.</p>
+                              </div>
+                              <div className="ml-auto px-2 py-0.5 rounded border border-brand-purple/30 text-[10px] text-brand-purple font-bold uppercase bg-brand-purple/10">
+                                 Unlocked
+                              </div>
+                           </div>
+                        )}
+
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 opacity-50">
+                           <Shield className="w-5 h-5 text-slate-500" />
+                           <div>
+                              <p className="text-slate-400 text-xs font-bold">Iron Will (Locked)</p>
+                              <p className="text-[10px] text-slate-600">Reach a 30-day streak.</p>
                            </div>
                         </div>
-                     ) : (
-                        <div className="space-y-4">
-                           {stats.topics.map((topic, i) => (
-                              <div key={i} className="space-y-2">
-                                 <div className="flex justify-between text-xs">
-                                    <span className="text-white font-medium">{topic.name}</span>
-                                    <span className="text-slate-400 font-mono">{topic.hours}h</span>
-                                 </div>
-                                 <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                    <div 
-                                       className={`h-full rounded-full ${i === 0 ? 'bg-brand-cyber' : i === 1 ? 'bg-brand-purple' : 'bg-slate-500'}`} 
-                                       style={{width: `${(topic.hours / 200) * 100}%`}}
-                                    ></div>
-                                 </div>
-                              </div>
-                           ))}
-                        </div>
-                     )}
+                     </div>
                   </div>
                </div>
 
@@ -289,34 +318,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onOpenChat }) => {
                      <div className="bg-[#0B1121] rounded-xl p-5 border border-brand-accent/20 h-full">
                         <div className="flex items-center gap-2 mb-3">
                            <Activity className="w-4 h-4 text-brand-accent" />
-                           <span className="text-xs font-bold text-brand-accent uppercase tracking-wider">Active Protocol</span>
+                           <span className="text-xs font-bold text-brand-accent uppercase tracking-wider">Daily Protocol</span>
                         </div>
-                        <h3 className="text-lg font-bold text-white mb-2">SaaS Launch Q4</h3>
-                        <p className="text-xs text-slate-400 mb-4">Focusing on high-leverage shipping tasks. 07:00 - 11:00 UTC Daily.</p>
+                        <h3 className="text-lg font-bold text-white mb-2">Daily Intent</h3>
+                        <p className="text-xs text-slate-400 mb-4 italic">"{profile?.daily_intent || "No intent set for today."}"</p>
                         <div className="flex items-center gap-2 text-[10px] text-slate-500">
                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                           <span>Currently Active</span>
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* Badges / Reputation */}
-                  <div className="glass-panel p-5 rounded-2xl border border-white/5">
-                     <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Reputation Signal</h3>
-                     <div className="space-y-3">
-                        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
-                           <Shield className="w-5 h-5 text-brand-accent" />
-                           <div>
-                              <p className="text-white text-xs font-bold">High Integrity</p>
-                              <p className="text-[10px] text-slate-500">99% session completion rate</p>
-                           </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
-                           <Users className="w-5 h-5 text-brand-purple" />
-                           <div>
-                              <p className="text-white text-xs font-bold">Mentor Status</p>
-                              <p className="text-[10px] text-slate-500">Available for guidance</p>
-                           </div>
+                           <span>System Tracking</span>
                         </div>
                      </div>
                   </div>
@@ -334,101 +342,61 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onOpenChat }) => {
                      <button className="text-[10px] text-brand-accent font-bold hover:underline">Find New Allies</button>
                   </div>
                   
-                  {allies.map((ally, i) => (
-                     <div key={i} className="glass-panel p-4 rounded-xl border border-white/5 flex items-center justify-between group hover:border-brand-accent/30 transition-all">
-                        <div className="flex items-center gap-4">
-                           <div className="w-10 h-10 rounded-lg bg-[#020617] flex items-center justify-center text-white font-bold border border-white/10">
-                              {ally.name[0]}
-                           </div>
-                           <div>
-                              <h4 className="text-white font-bold text-sm">{ally.name}</h4>
-                              <p className="text-xs text-slate-500">{ally.role} • <span className="text-slate-400">{ally.common}</span></p>
-                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                           {ally.status === 'Focusing' && (
-                              <span className="px-2 py-0.5 rounded bg-brand-accent/10 text-brand-accent text-[10px] font-bold border border-brand-accent/20 animate-pulse">
-                                 FOCUSING
-                              </span>
-                           )}
-                           <button 
-                             onClick={() => onOpenChat && onOpenChat(ally)}
-                             className="p-2 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-                           >
-                              <MessageSquare className="w-4 h-4" />
-                           </button>
-                        </div>
-                     </div>
-                  ))}
+                  {allies.length === 0 ? (
+                      <div className="glass-panel p-8 rounded-xl border border-white/5 text-center">
+                          <Users className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                          <p className="text-slate-400 text-sm font-bold">No Allies Connected</p>
+                          <p className="text-slate-600 text-xs mt-1 mb-4">Focus is better with accountability.</p>
+                          <button className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-xs font-bold rounded-lg border border-white/10 transition-colors">
+                              Go to Community Search
+                          </button>
+                      </div>
+                  ) : (
+                      allies.map((ally, i) => (
+                         <div key={i} className="glass-panel p-4 rounded-xl border border-white/5 flex items-center justify-between group hover:border-brand-accent/30 transition-all">
+                            <div className="flex items-center gap-4">
+                               <div className="w-10 h-10 rounded-lg bg-[#020617] flex items-center justify-center text-white font-bold border border-white/10">
+                                  {ally.full_name[0]}
+                               </div>
+                               <div>
+                                  <h4 className="text-white font-bold text-sm">{ally.full_name}</h4>
+                                  <p className="text-xs text-slate-500">Protocol Ally</p>
+                               </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                               <button 
+                                 onClick={() => onOpenChat && onOpenChat({ name: ally.full_name, role: 'Ally', status: 'Online' })}
+                                 className="p-2 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                               >
+                                  <MessageSquare className="w-4 h-4" />
+                               </button>
+                            </div>
+                         </div>
+                      ))
+                  )}
 
                   {/* Add New Slot */}
-                  <div className="border border-dashed border-white/10 rounded-xl p-4 flex items-center justify-center gap-2 text-slate-500 hover:text-white hover:border-white/30 cursor-pointer transition-all">
-                     <Search className="w-4 h-4" />
-                     <span className="text-xs font-bold uppercase">Discover Peers</span>
-                  </div>
+                  {allies.length > 0 && (
+                      <div className="border border-dashed border-white/10 rounded-xl p-4 flex items-center justify-center gap-2 text-slate-500 hover:text-white hover:border-white/30 cursor-pointer transition-all">
+                         <Search className="w-4 h-4" />
+                         <span className="text-xs font-bold uppercase">Discover More Peers</span>
+                      </div>
+                  )}
                </div>
 
-               {/* Incoming Requests */}
+               {/* Incoming Requests Placeholder */}
                <div className="glass-panel p-6 rounded-2xl border border-white/5 h-fit">
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Pending Requests</h3>
-                  <div className="space-y-4">
-                     <div className="p-4 rounded-xl bg-[#020617] border border-white/5">
-                        <div className="flex items-center gap-3 mb-3">
-                           <div className="w-8 h-8 rounded-full bg-slate-800"></div>
-                           <div>
-                              <p className="text-sm text-white font-bold">Quant_Jock</p>
-                              <p className="text-[10px] text-slate-500">Finance • 92% Match</p>
-                           </div>
-                        </div>
-                        <div className="flex gap-2">
-                           <button className="flex-1 py-1.5 bg-brand-accent hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors">Accept Alliance</button>
-                           <button className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-400 text-xs font-bold rounded-lg transition-colors">Ignore</button>
-                        </div>
-                     </div>
-                     <p className="text-xs text-slate-600 text-center italic">Only Allies can see your detailed breakdown.</p>
+                  <div className="text-center py-6 text-slate-600 text-xs italic">
+                      No pending requests at this time.
                   </div>
                </div>
             </div>
          )}
 
-         {/* --- TAB: PACTS (Accountability) --- */}
+         {/* --- TAB: PACTS (Placeholder) --- */}
          {activeTab === 'pacts' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-4 duration-300">
-               {pacts.map((pact, i) => (
-                  <div key={i} className="glass-panel p-6 rounded-2xl border border-brand-accent/20 relative overflow-hidden group">
-                     <div className="absolute top-0 right-0 w-32 h-32 bg-brand-accent/5 rounded-full blur-2xl group-hover:bg-brand-accent/10 transition-all"></div>
-                     
-                     <div className="flex justify-between items-start mb-6 relative z-10">
-                        <div className="flex items-center gap-3">
-                           <div className="p-2 rounded-lg bg-brand-accent/10 text-brand-accent">
-                              <Scale className="w-5 h-5" />
-                           </div>
-                           <div>
-                              <h3 className="text-white font-bold">{pact.title}</h3>
-                              <p className="text-xs text-slate-400">Pact with {pact.partner}</p>
-                           </div>
-                        </div>
-                        <div className="px-2 py-1 rounded bg-green-500/10 border border-green-500/20 text-green-500 text-[10px] font-bold uppercase">
-                           {pact.status}
-                        </div>
-                     </div>
-
-                     <div className="space-y-2 relative z-10">
-                        <div className="flex justify-between text-xs">
-                           <span className="text-slate-400">Adherence</span>
-                           <span className="text-white font-mono">{pact.progress}%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                           <div className="h-full bg-brand-accent" style={{width: `${pact.progress}%`}}></div>
-                        </div>
-                     </div>
-
-                     <button className="mt-6 w-full py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-xs text-slate-300 hover:text-white transition-all">
-                        View Agreement Details
-                     </button>
-                  </div>
-               ))}
-
                {/* Create New Pact */}
                <div className="border border-dashed border-white/10 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 text-slate-500 hover:text-white hover:border-brand-accent/30 cursor-pointer transition-all min-h-[200px]">
                   <Handshake className="w-8 h-8" />

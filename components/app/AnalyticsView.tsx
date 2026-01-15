@@ -4,7 +4,8 @@ import {
   BrainCircuit, Zap, BarChart3, PieChart, AlertTriangle,
   Anchor, ArrowUpRight, GitCommit, Database, Layers,
   Compass, Search, Radio, Wifi, Battery, BatteryCharging,
-  ShieldCheck, Crosshair, Map, Route, FileKey, Server, Lock, Shield
+  ShieldCheck, Crosshair, Map, Route, FileKey, Server, Lock, Shield,
+  RotateCcw
 } from 'lucide-react';
 import SectionFade from '../ui/SectionFade';
 
@@ -449,8 +450,5 @@ const AnalyticsView: React.FC = () => {
     </div>
   );
 };
-
-// Helper for icon mapping in list
-import { RotateCcw } from 'lucide-react';
 
 export default AnalyticsView;
