@@ -9,7 +9,7 @@ import {
   LogOut, 
   Menu, 
   X,
-  Zap
+  User as UserIcon
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import BackgroundGrid from '../BackgroundGrid';
@@ -18,19 +18,36 @@ import SessionsView from './SessionsView';
 import AnalyticsView from './AnalyticsView';
 import CommunityView from './CommunityView';
 import SettingsView from './SettingsView';
+import ProfileView from './ProfileView';
 
 interface DashboardLayoutProps {
   session: Session;
 }
 
-type ViewState = 'home' | 'sessions' | 'analytics' | 'community' | 'settings';
+type ViewState = 'home' | 'sessions' | 'analytics' | 'community' | 'settings' | 'profile';
+
+export interface SessionRequest {
+  title?: string;
+  duration?: number;
+  type?: 'pomodoro' | 'deep_work' | 'freestyle';
+  goal?: string;
+  autoOpen: boolean;
+}
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
   const [activeView, setActiveView] = useState<ViewState>('home');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  
+  // Bridge state to pass focus tool data to Sessions view
+  const [sessionRequest, setSessionRequest] = useState<SessionRequest | null>(null);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  const handleSessionRequest = (request: SessionRequest) => {
+    setSessionRequest(request);
+    setActiveView('sessions');
   };
 
   const navItems = [
@@ -38,17 +55,19 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
     { id: 'sessions', label: 'Sessions', icon: Timer },
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'community', label: 'Community', icon: Users },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const renderView = () => {
     switch (activeView) {
-      case 'home': return <DashboardHome user={session.user} onChangeView={setActiveView} />;
-      case 'sessions': return <SessionsView />;
+      case 'home': 
+        return <DashboardHome user={session.user} onChangeView={setActiveView} onRequestSession={handleSessionRequest} />;
+      case 'sessions': 
+        return <SessionsView initialConfig={sessionRequest} onConfigConsumed={() => setSessionRequest(null)} />;
       case 'analytics': return <AnalyticsView />;
       case 'community': return <CommunityView />;
       case 'settings': return <SettingsView user={session.user} />;
-      default: return <DashboardHome user={session.user} onChangeView={setActiveView} />;
+      case 'profile': return <ProfileView user={session.user} />;
+      default: return <DashboardHome user={session.user} onChangeView={setActiveView} onRequestSession={handleSessionRequest} />;
     }
   };
 
@@ -59,15 +78,18 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
       {/* Sidebar Navigation (Desktop) */}
       <aside className="hidden lg:flex flex-col w-72 h-screen fixed left-0 top-0 border-r border-white/5 bg-[#020617]/80 backdrop-blur-xl z-50">
         {/* Logo Area */}
-        <div className="p-8 flex items-center gap-3">
+        <div 
+          className="p-8 flex items-center gap-3 cursor-pointer"
+          onClick={() => setActiveView('home')}
+        >
           <div className="w-8 h-8 bg-gradient-to-br from-brand-cyber to-brand-purple rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.3)]">
             <span className="font-display font-bold text-white text-lg">Q</span>
           </div>
           <span className="font-display font-bold text-xl tracking-widest text-white">QEPHIX</span>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-6 space-y-2">
+        {/* Main Navigation */}
+        <nav className="flex-1 px-4 py-2 space-y-2">
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -86,32 +108,56 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
               )}
             </button>
           ))}
+          
+          {/* Divider */}
+          <div className="my-4 border-t border-white/5 mx-4"></div>
+
+           {/* Profile & Settings (Separate Group) */}
+           <button
+              onClick={() => setActiveView('profile')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${
+                activeView === 'profile' 
+                  ? 'text-white bg-white/5 border border-white/10' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <UserIcon className={`w-5 h-5 transition-colors ${activeView === 'profile' ? 'text-brand-accent' : 'text-slate-500'}`} />
+              <span className="font-medium tracking-wide">Profile</span>
+           </button>
+           
+           <button
+              onClick={() => setActiveView('settings')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${
+                activeView === 'settings' 
+                  ? 'text-white bg-white/5 border border-white/10' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Settings className={`w-5 h-5 transition-colors ${activeView === 'settings' ? 'text-brand-accent' : 'text-slate-500'}`} />
+              <span className="font-medium tracking-wide">Settings</span>
+           </button>
         </nav>
 
-        {/* User & Logout */}
+        {/* User Mini Profile */}
         <div className="p-4 border-t border-white/5">
-          <div className="flex items-center gap-3 px-4 py-3 mb-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border border-white/10 flex items-center justify-center">
-               <span className="font-bold text-xs">{session.user.email?.[0].toUpperCase()}</span>
+          <div 
+             className="flex items-center gap-3 px-4 py-3 mb-2 cursor-pointer hover:bg-white/5 rounded-lg transition-colors"
+             onClick={() => setActiveView('profile')}
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-cyber to-brand-purple border border-white/10 flex items-center justify-center text-white text-xs font-bold">
+               {session.user.email?.[0].toUpperCase()}
             </div>
             <div className="flex-1 overflow-hidden">
                <p className="text-sm font-medium text-white truncate">{session.user.user_metadata?.full_name || 'User'}</p>
-               <p className="text-xs text-slate-500 truncate">Pro Plan</p>
+               <p className="text-xs text-slate-500 truncate">Online</p>
             </div>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/5 transition-all text-sm"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
         </div>
       </aside>
 
       {/* Mobile Header & Nav */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-[#020617]/90 backdrop-blur-md border-b border-white/10 z-50 flex items-center justify-between px-4">
-         <div className="flex items-center gap-2">
+         <div className="flex items-center gap-2" onClick={() => setActiveView('home')}>
             <div className="w-6 h-6 bg-gradient-to-br from-brand-cyber to-brand-purple rounded flex items-center justify-center">
               <span className="font-display font-bold text-white text-xs">Q</span>
             </div>
@@ -124,8 +170,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
 
       {/* Mobile Menu Overlay */}
       {isMobileNavOpen && (
-        <div className="fixed inset-0 z-40 bg-[#020617] pt-20 px-6 lg:hidden animate-in slide-in-from-right duration-200">
-           <nav className="space-y-2">
+        <div className="fixed inset-0 z-40 bg-[#020617] pt-20 px-6 lg:hidden animate-in slide-in-from-right duration-200 overflow-y-auto">
+           <nav className="space-y-2 pb-8">
             {navItems.map((item) => (
               <button
                 key={item.id}
@@ -143,9 +189,32 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
                 <span className="text-lg font-medium">{item.label}</span>
               </button>
             ))}
+            
+            <div className="h-px bg-white/10 my-4"></div>
+            
+            <button
+                onClick={() => { setActiveView('profile'); setIsMobileNavOpen(false); }}
+                className={`w-full flex items-center gap-4 px-4 py-4 rounded-xl border ${
+                  activeView === 'profile' ? 'bg-white/5 border-brand-accent/30 text-white' : 'border-transparent text-slate-400'
+                }`}
+            >
+                <UserIcon />
+                <span className="text-lg font-medium">Profile</span>
+            </button>
+            
+            <button
+                onClick={() => { setActiveView('settings'); setIsMobileNavOpen(false); }}
+                className={`w-full flex items-center gap-4 px-4 py-4 rounded-xl border ${
+                  activeView === 'settings' ? 'bg-white/5 border-brand-accent/30 text-white' : 'border-transparent text-slate-400'
+                }`}
+            >
+                <Settings />
+                <span className="text-lg font-medium">Settings</span>
+            </button>
+
              <button 
               onClick={handleLogout}
-              className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border border-transparent text-red-400 mt-8"
+              className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border border-transparent text-red-400 mt-4"
             >
               <LogOut />
               <span className="text-lg font-medium">Sign Out</span>
