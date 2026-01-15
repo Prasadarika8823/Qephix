@@ -8,7 +8,7 @@ import {
   Pause, Sun, Moon, Crosshair, 
   ShieldAlert, MousePointerClick, Lock,
   Award, Users, Edit2, Save, CheckCircle2,
-  ChevronRight
+  ChevronRight, MessageSquare
 } from 'lucide-react';
 import SectionFade from '../ui/SectionFade';
 import { SessionRequest } from './DashboardLayout';
@@ -18,9 +18,10 @@ interface DashboardHomeProps {
   user: User;
   onChangeView: (view: any) => void;
   onRequestSession: (request: SessionRequest) => void;
+  onOpenChat: (ally: { name: string; role: string; status: string }) => void;
 }
 
-const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onRequestSession }) => {
+const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onRequestSession, onOpenChat }) => {
   const firstName = user.user_metadata?.full_name?.split(' ')[0] || 'Traveler';
   const [currentTime, setCurrentTime] = useState(new Date());
   const [focusMode, setFocusMode] = useState(false);
@@ -36,9 +37,9 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
   // New Features State
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [allies, setAllies] = useState<Ally[]>([]);
+  const [showAllyList, setShowAllyList] = useState(false);
   
   // Inputs
-  const [intentInput, setIntentInput] = useState('');
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState('150');
 
@@ -141,7 +142,6 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
       }
 
       setProfile(profileData);
-      setIntentInput(profileData?.daily_intent || '');
       setGoalInput(profileData?.daily_goal_minutes?.toString() || '150');
 
       // --- 2. FETCH ACHIEVEMENTS & UNLOCK LOGIC ---
@@ -165,7 +165,6 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
           
           if (newBadge) {
              setAchievements(prev => [...prev, newBadge]);
-             // Optional: Trigger a toast here
           }
       }
 
@@ -257,14 +256,6 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
   };
 
   // --- ACTIONS ---
-
-  const handleUpdateIntent = async () => {
-    if (!profile) return;
-    try {
-      await supabase.from('profiles').update({ daily_intent: intentInput }).eq('id', user.id);
-      setProfile({ ...profile, daily_intent: intentInput });
-    } catch (error) { console.error(error); }
-  };
 
   const handleUpdateGoal = async () => {
     if (!profile) return;
@@ -366,7 +357,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
               <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">System Nominal</span>
             </div>
             <div className="text-2xl md:text-3xl font-display font-bold text-white">
-              Ready to focus, <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">{firstName}</span>?
+               Protocol Synchronized. <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">{firstName}</span>, your output defines you.
             </div>
           </SectionFade>
         </div>
@@ -744,42 +735,54 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
          </div>
       </div>
 
-      {/* --- 5. FLOATING FOCUS DOCK --- */}
-      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl z-50 transition-all duration-500 ${focusMode ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-95'}`}>
-         <div className="bg-[#0B1121]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-[0_0_50px_rgba(0,0,0,0.6)] flex items-center gap-2 ring-1 ring-white/5 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none"></div>
-
-            <div className="flex-1 flex items-center gap-3 px-4 py-2 bg-[#020617]/50 rounded-xl border border-white/5 focus-within:border-brand-cyber/50 transition-colors">
-               <Crosshair className="w-4 h-4 text-slate-500" />
-               <input 
-                  type="text" 
-                  value={intentInput}
-                  onChange={(e) => setIntentInput(e.target.value)}
-                  onBlur={handleUpdateIntent}
-                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateIntent()}
-                  placeholder="What is your single outcome today?" 
-                  className="w-full bg-transparent border-none outline-none text-sm text-white placeholder-slate-600"
-               />
+      {/* --- 5. ALLY COMMS INTERFACE (Replaces old Dock) --- */}
+      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-500 ${focusMode ? 'translate-y-2 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
+        
+        {/* Ally List Popup (If Multiple Allies) */}
+        {showAllyList && allies.length > 1 && (
+            <div className="absolute bottom-full left-0 w-full mb-2 bg-[#0B1121] border border-white/10 rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2">
+                {allies.map((ally) => (
+                    <button 
+                        key={ally.profile_id}
+                        onClick={() => onOpenChat({ name: ally.full_name, role: 'Ally', status: 'Online' })}
+                        className="w-full text-left px-4 py-3 hover:bg-white/5 text-sm font-bold text-slate-300 hover:text-white flex items-center gap-3 border-b border-white/5 last:border-0"
+                    >
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        {ally.full_name}
+                    </button>
+                ))}
             </div>
+        )}
 
-            <div className="flex items-center gap-2 pl-2 border-l border-white/5">
-               <button 
-                  onClick={() => handleUpdateIntent()}
-                  className="p-2.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-colors relative group"
-               >
-                  <Save className="w-4 h-4" />
-               </button>
-
-               <button 
-                  onClick={() => onRequestSession({ title: "Deep Work Mode", duration: 60, type: 'deep_work', autoOpen: true })}
-                  className="group relative px-4 py-2.5 bg-brand-accent hover:bg-orange-600 rounded-xl text-white font-bold text-xs uppercase tracking-wide shadow-[0_0_20px_rgba(234,88,12,0.3)] hover:shadow-[0_0_30px_rgba(234,88,12,0.5)] transition-all flex items-center gap-2 overflow-hidden"
-               >
-                  <span className="relative z-10">Deep Mode</span>
-                  <MousePointerClick className="w-4 h-4 relative z-10" />
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-               </button>
-            </div>
-         </div>
+        {/* Main Comms Button */}
+        <button 
+            onClick={() => {
+                if (allies.length === 0) onChangeView('community');
+                else if (allies.length === 1) onOpenChat({ name: allies[0].full_name, role: 'Ally', status: 'Online' });
+                else setShowAllyList(!showAllyList);
+            }}
+            className="group flex items-center gap-3 px-6 py-3 bg-[#0B1121]/90 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_0_30px_rgba(0,0,0,0.5)] hover:border-brand-cyber/50 transition-all hover:scale-105 min-w-[220px] justify-center"
+        >
+            {allies.length > 0 ? (
+                <>
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                    </span>
+                    <span className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        Open Secure Comms
+                        <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] text-slate-300">{allies.length}</span>
+                    </span>
+                </>
+            ) : (
+                <>
+                    <Users className="w-4 h-4 text-slate-500 group-hover:text-brand-accent transition-colors" />
+                    <span className="text-sm font-bold text-slate-400 group-hover:text-white uppercase tracking-wider transition-colors">
+                        Connect with Allies
+                    </span>
+                </>
+            )}
+        </button>
       </div>
 
     </div>

@@ -42,6 +42,7 @@ interface Ally {
 }
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
+  const activeViewInitial = 'home';
   const [activeView, setActiveView] = useState<ViewState>('home');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   
@@ -78,14 +79,21 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ session }) => {
   const renderView = () => {
     switch (activeView) {
       case 'home': 
-        return <DashboardHome user={session.user} onChangeView={setActiveView} onRequestSession={handleSessionRequest} />;
+        return (
+          <DashboardHome 
+            user={session.user} 
+            onChangeView={setActiveView} 
+            onRequestSession={handleSessionRequest}
+            onOpenChat={handleOpenChat}
+          />
+        );
       case 'sessions': 
         return <SessionsView initialConfig={sessionRequest} onConfigConsumed={() => setSessionRequest(null)} />;
       case 'analytics': return <AnalyticsView />;
       case 'community': return <CommunityView />;
       case 'settings': return <SettingsView user={session.user} />;
       case 'profile': return <ProfileView user={session.user} onOpenChat={handleOpenChat} />;
-      default: return <DashboardHome user={session.user} onChangeView={setActiveView} onRequestSession={handleSessionRequest} />;
+      default: return <DashboardHome user={session.user} onChangeView={setActiveView} onRequestSession={handleSessionRequest} onOpenChat={handleOpenChat} />;
     }
   };
 
