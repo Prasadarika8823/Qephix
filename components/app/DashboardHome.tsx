@@ -8,7 +8,7 @@ import {
   Pause, Sun, Moon, Crosshair, 
   ShieldAlert, MousePointerClick, Lock,
   Award, Users, Edit2, Save, CheckCircle2,
-  ChevronRight, MessageSquare
+  ChevronRight, MessageSquare, Signal
 } from 'lucide-react';
 import SectionFade from '../ui/SectionFade';
 import { SessionRequest } from './DashboardLayout';
@@ -29,6 +29,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
   
   // --- DATABASE STATE ---
   const [loading, setLoading] = useState(true);
+  const [systemStatus, setSystemStatus] = useState<'nominal' | 'offline' | 'checking'>('checking');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [nextSession, setNextSession] = useState<UserSession | null>(null);
   const [calculatedPeak, setCalculatedPeak] = useState("Not enough data");
@@ -71,8 +72,9 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      setSystemStatus('checking');
 
-      // 1. Fetch Profile
+      // 1. Fetch Profile (Connection Test)
       let { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -80,25 +82,36 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
         .single();
 
       // Handle New User creation if missing
-      if (profileError && profileError.code === 'PGRST116') {
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert([{ 
-            id: user.id, 
-            full_name: user.user_metadata?.full_name,
-            daily_goal_minutes: 150,
-            minutes_focused_today: 0,
-            discipline_index: 0,
-            average_focus_score: 0,
-            current_streak: 1, // First login counts as streak 1
-            last_active_date: new Date().toISOString().split('T')[0],
-            total_sessions_count: 0
-          }])
-          .select()
-          .single();
-        
-        if (createError) throw createError;
-        profileData = newProfile;
+      if (profileError) {
+          if (profileError.code === 'PGRST116') {
+             // Profile missing, create one
+            const { data: newProfile, error: createError } = await supabase
+              .from('profiles')
+              .insert([{ 
+                id: user.id, 
+                full_name: user.user_metadata?.full_name,
+                daily_goal_minutes: 150,
+                minutes_focused_today: 0,
+                discipline_index: 0,
+                average_focus_score: 0,
+                current_streak: 1, // First login counts as streak 1
+                last_active_date: new Date().toISOString().split('T')[0],
+                total_sessions_count: 0
+              }])
+              .select()
+              .single();
+            
+            if (createError) throw createError;
+            profileData = newProfile;
+            setSystemStatus('nominal');
+          } else {
+            // Real Error (e.g., Connection failed, Table missing)
+            console.error("Profile Fetch Error:", profileError);
+            setSystemStatus('offline');
+            throw profileError;
+          }
+      } else {
+         setSystemStatus('nominal');
       }
 
       // --- LOGIN STREAK & DISCIPLINE LOGIC ---
@@ -250,6 +263,8 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      // Keep system status as offline if caught here
+      setSystemStatus('offline');
     } finally {
       setLoading(false);
     }
@@ -353,8 +368,15 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, onChangeView, onReq
         <div>
           <SectionFade>
             <div className="flex items-center gap-3 mb-1">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">System Nominal</span>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${systemStatus === 'nominal' ? 'bg-green-500' : systemStatus === 'offline' ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
+              <span className={`text-[10px] font-mono uppercase tracking-widest ${systemStatus === 'nominal' ? 'text-slate-500' : systemStatus === 'offline' ? 'text-red-500' : 'text-yellow-500'}`}>
+                 {systemStatus === 'nominal' ? 'System Nominal' : systemStatus === 'offline' ? 'Database Disconnected' : 'Checking Connection...'}
+              </span>
+              {systemStatus === 'offline' && (
+                  <span className="px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-[8px] text-red-400 font-bold uppercase">
+                     Run SQL Schema
+                  </span>
+              )}
             </div>
             <div className="text-2xl md:text-3xl font-display font-bold text-white">
                Protocol Synchronized. <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">{firstName}</span>, your output defines you.
